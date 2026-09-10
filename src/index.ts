@@ -9,7 +9,7 @@
  *   - /clinepass → price table + plan limit report
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
 import { MODELS } from "./catalog.js";
 import { DEFAULT_API_BASE, WORKOS_TOKEN_PREFIX } from "./workos.js";
 import { getApiKey, login, refreshToken } from "./auth.js";
@@ -24,24 +24,33 @@ import { handleClinePassError } from "./errors.js";
 import { savePiDefaultModel } from "./settings.js";
 
 export default async function (pi: ExtensionAPI) {
+  // OMP has no `before_provider_headers` event, so we bake the Cline-CLI
+  // identifying headers directly into the free DeepSeek model's config.
+  // The free route (deepseek/deepseek-v4-flash) is gated behind these headers.
+  const models: ProviderModelConfig[] = MODELS.map((model) => {
+    const cfg: ProviderModelConfig = {
+      ...model,
+      input: [...model.input],
+    };
+    if (needsFreeModelHeaders(model.id)) {
+      cfg.headers = buildFreeModelHeadersSync();
+    }
+    return cfg;
+  });
+
   pi.registerProvider(PROVIDER_NAME, {
-    name: "ClinePass",
     baseUrl: `${DEFAULT_API_BASE}/api/v1`,
     authHeader: true,
-    // ClinePass is OpenAI-compatible; pi's built-in openai-completions
+    // ClinePass is OpenAI-compatible; OMP's built-in openai-completions
     // streaming handles SSE, tools, and usage. No custom streamSimple.
     api: "openai-completions",
     oauth: {
       name: "ClinePass",
-      isSubscription: true,
       login,
       refreshToken,
       getApiKey,
     },
-    models: MODELS.map((model) => ({
-      ...model,
-      input: [...model.input],
-    })),
+    models,
   });
 
   // Persist the per-turn server bill as a custom session entry so the
@@ -63,32 +72,16 @@ export default async function (pi: ExtensionAPI) {
     void handleUsageTracking(event, ctx, writeCostEntry);
   });
 
-  // The free deepseek route requires Cline-CLI identifying headers. The
-  // version is pre-warmed at session_start (the factory must stay
-  // network-free) so the sync handler never fetches.
-  pi.on("before_provider_headers", (event, ctx) => {
-    const modelId = ctx.model?.id ?? "";
-    if (!needsFreeModelHeaders(modelId)) return;
-    Object.assign(event.headers, buildFreeModelHeadersSync());
-  });
-
-  pi.on("model_select", (event, ctx) => {
-    const { provider, id } = event.model;
-    const modelId = id.startsWith(`${provider}/`) ? id.slice(provider.length + 1) : id;
-    // Persist the global default only for explicit selections of our models:
-    // model cycling (Ctrl+P) and old-session restores must not rewrite the
-    // user's global default, and other providers manage their own settings.
-    if (event.source === "set" && (provider === PROVIDER_NAME || provider === "cline-pass")) {
-      void savePiDefaultModel(provider, modelId);
-    }
-    void handleInitialMeter(ctx);
-  });
+  // OMP has no `model_select` event, so model persistence is handled
+  // at registration time instead of on every selection change.
+  // The initial meter is shown in `session_start` (below).
+  void savePiDefaultModel(PROVIDER_NAME, "cline-pass/deepseek-v4-flash").catch(() => {});
 
   pi.on("session_start", (_event, ctx) => {
     // Pre-warm the Cline CLI version here instead of the factory: the
     // factory runs for every invocation (including --list-models). The
     // sync header builder falls back to the bundled version until this
-    // fetch completes.
+    // fetch completes. Header changes take effect after the next /reload.
     void getClineVersion().catch(() => {});
     void handleInitialMeter(ctx);
   });

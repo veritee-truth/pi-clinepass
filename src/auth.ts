@@ -5,7 +5,7 @@
  * paste API key); the user picks explicitly every time.
  */
 
-import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai";
+import type { OAuthCredentials, OAuthLoginCallbacks } from "@oh-my-pi/pi-ai";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -237,13 +237,11 @@ async function loginWithDeviceFlow(
   options: AuthOptions,
 ): Promise<OAuthCredentials> {
   const device = await startDeviceAuthorization({ fetch: options.fetch });
-  callbacks.onDeviceCode({
-    userCode: device.userCode,
-    verificationUri: device.verificationUri,
-    intervalSeconds: device.intervalSeconds,
-    expiresInSeconds: device.expiresInSeconds,
+  // OMP's OAuthLoginCallbacks has no onDeviceCode; use onAuth with instructions.
+  callbacks.onAuth({
+    url: device.verificationUriComplete ?? device.verificationUri,
+    instructions: `Enter the code: ${device.userCode} (expires in ${device.expiresInSeconds}s)`,
   });
-  callbacks.onAuth({ url: device.verificationUriComplete ?? device.verificationUri });
   const tokens = await pollDeviceAuthorization(
     {
       deviceCode: device.deviceCode,
@@ -307,10 +305,14 @@ export async function login(callbacks: OAuthLoginCallbacks, options: AuthOptions
     optionsList.unshift({ id: "reuse", label: "Use existing sign-in (Cline CLI)" });
   }
 
-  const selected = await callbacks.onSelect({
-    message: "Choose how to sign in to ClinePass",
-    options: optionsList,
-  });
+  // OMP's OAuthLoginCallbacks has no onSelect; use onPrompt as a text-based chooser.
+  const optionsText = optionsList.map((o) => `${o.id}: ${o.label}`).join("\n");
+  const selected = (
+    await callbacks.onPrompt({
+      message: `Choose how to sign in to ClinePass\n\n${optionsText}`,
+      placeholder: "Enter the option id (e.g. 'device', 'paste')",
+    })
+  ).trim().toLowerCase();
   if (!selected) throw new Error("ClinePass login cancelled");
 
   switch (selected) {

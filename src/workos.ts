@@ -6,7 +6,7 @@
  * stores. All I/O is injectable for testability.
  */
 
-import type { OAuthCredentials } from "@earendil-works/pi-ai";
+import type { OAuthCredentials } from "@oh-my-pi/pi-ai";
 
 export const WORKOS_API_BASE = "https://api.workos.com";
 export const WORKOS_CLIENT_ID = "client_01K3A541FN8TA3EPPHTD2325AR";

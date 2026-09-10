@@ -1,14 +1,14 @@
 {
-  "name": "pi-clinepass",
-  "version": "0.1.1",
-  "description": "ClinePass provider for pi — static measured-price catalog, server-truth billing meter, free models",
+  "name": "pi-clinepass-omp",
+  "version": "0.1.1-omp",
+  "description": "ClinePass provider for OMP — static measured-price catalog, server-truth billing meter, free models (OMP fork)",
   "keywords": [
     "ai",
     "cline",
     "cline-pass",
     "clinepass",
-    "pi",
-    "pi-coding-agent",
+    "omp",
+    "oh-my-pi",
     "pi-package",
     "pi-extension"
   ],
@@ -36,8 +36,8 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*"
+    "@oh-my-pi/pi-ai": "*",
+    "@oh-my-pi/pi-coding-agent": "*"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",
