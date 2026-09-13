@@ -28,8 +28,55 @@ export interface AuthOptions {
   readFile?: (path: string) => string;
   fileExists?: (path: string) => boolean;
   writeFile?: (path: string, data: string) => void;
+  /**
+   * OMP-native credential source: the `clinepass` credential as OMP's own
+   * AuthStorage holds it. OMP stores credentials in `~/.omp/agent`
+   * (SQLite-backed AuthStorage), NOT in a pi-style `auth.json`, so this is the
+   * authoritative source; the auth.json path is only a standalone fallback
+   * (tests, direct library use). Wired from `ctx.modelRegistry.authStorage`
+   * by the extension factory.
+   */
+  readOmpCredential?: () => OmpStoredCredential | undefined;
+  /** OMP-native credential writer (AuthStorage.set) — persists rotated tokens. */
+  writeOmpCredential?: (credential: OmpStoredCredential) => Promise<void>;
   fetch?: typeof globalThis.fetch;
   apiBase?: string;
+}
+
+/**
+ * The `clinepass` credential as OMP's AuthStorage stores it — the OAuth
+ * credential object plus the `api_key` alternative OMP also accepts. Kept
+ * structurally open so a rotated credential written back preserves every field
+ * OMP set (`type`, `expires`, account identity) instead of dropping them.
+ */
+export interface OmpStoredCredential {
+  type: "oauth" | "api_key";
+  access: string;
+  refresh: string;
+  expires: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Host binding for OMP's credential store.
+ *
+ * The meter resolves credentials from background async tasks (usage polling,
+ * late-record checks) that have no extension context in hand, so the store is
+ * bound once at extension setup rather than threaded through every call as an
+ * option. Explicit `AuthOptions.readOmpCredential` / `writeOmpCredential`
+ * still win when supplied, which is what tests use.
+ */
+let boundCredentialStore: {
+  read?: () => OmpStoredCredential | undefined;
+  write?: (credential: OmpStoredCredential) => Promise<void>;
+} = {};
+
+/** Bind OMP's credential store for the process (called by the extension factory). */
+export function bindOmpCredentialStore(store: {
+  read?: () => OmpStoredCredential | undefined;
+  write?: (credential: OmpStoredCredential) => Promise<void>;
+}): void {
+  boundCredentialStore = store;
 }
 
 function defaultHomeDir(): string {
@@ -136,12 +183,41 @@ export function resolveClineCliCredential(options: AuthOptions = {}): ClineAuthC
 }
 
 /**
- * Read pi's OWN stored credential for the `clinepass` provider
- * (`~/.pi/agent/auth.json` → `clinepass` field). This is the identity pi
- * itself uses for chat requests after /login — the meter must match it.
- * Handles: plain string key, `{type:"api_key", key}`, and OAuth objects.
+ * Read the `clinepass` credential from wherever the host keeps it: OMP's own
+ * store first (authoritative — OMP keeps credentials in `~/.omp/agent` behind
+ * AuthStorage/SQLite, not in a pi-style auth.json), falling back to a pi-style
+ * `auth.json` for standalone use.
+ *
+ * Single entry point for every caller: the identity the meter measures is the
+ * identity OMP bills.
  */
-export function resolvePiStoredCredential(options: AuthOptions = {}): ClineAuthCredentials | undefined {
+export function resolveStoredCredential(options: AuthOptions = {}): ClineAuthCredentials | undefined {
+  const stored = (options.readOmpCredential ?? boundCredentialStore.read)?.();
+  if (!stored) return resolveAuthJsonCredential(options);
+
+  const access = stringValue(stored.access);
+  const refresh = stringValue(stored.refresh);
+  if (!access) return undefined;
+
+  // Static API keys never expire; WorkOS tokens carry a real expiry. A workos:
+  // token with no expiry is treated as stale (0) so it gets refreshed rather
+  // than being pinned until MAX_SAFE_INTEGER.
+  const isOAuth = isWorkosToken(access);
+  const expires = numberValue(stored.expires);
+  return {
+    accessToken: access,
+    refreshToken: refresh ?? access,
+    expiresAt: expires ?? (isOAuth ? 0 : Number.MAX_SAFE_INTEGER),
+  };
+}
+
+/**
+ * Fallback credential read: pi's auth.json (`~/.pi/agent/auth.json` →
+ * `clinepass`). Used only when no OMP-native source is wired (tests, direct
+ * library use). Handles a plain string, `{type:"api_key", key}`, and OAuth
+ * objects.
+ */
+function resolveAuthJsonCredential(options: AuthOptions = {}): ClineAuthCredentials | undefined {
   const home = resolveOptions(options).homeDir();
   const parsed = parseJson(join(home, ".pi", "agent", "auth.json"), options);
   if (!parsed) return undefined;
@@ -173,40 +249,70 @@ export function resolvePiStoredCredential(options: AuthOptions = {}): ClineAuthC
 // ─── Credential persistence ─────────────────────────────────────
 
 /**
- * Persist an OAuth credential for the `clinepass` provider back into pi's
- * auth.json (`~/.pi/agent/auth.json`). Used after a meter-triggered refresh
- * produced rotated tokens — if the server rotates single-use refresh
- * tokens, discarding the new one would leave pi's stored credential dead
- * and force a re-login. Waits for pi's lock file (`<auth.json>.lock`, held
- * by proper-lockfile while pi writes) to clear before merging.
+ * Persist a rotated OAuth credential for the `clinepass` provider.
+ *
+ * OMP-native path first: when the host wired `writeOmpCredential`, the
+ * credential goes back through AuthStorage (`set`), which owns locking and
+ * multi-process durability — no lock file of ours to race. Only standalone
+ * callers (tests, direct library use) fall through to the auth.json merge
+ * below.
+ *
+ * The write matters because the server rotates single-use refresh tokens:
+ * discarding the new one would leave the stored credential dead and force a
+ * re-login.
  */
 export async function persistOAuthCredential(
   credential: OAuthCredentials,
   options: AuthOptions = {},
 ): Promise<void> {
-  const { homeDir, readFile, fileExists, writeFile } = resolveOptions(options);
-  const authPath = join(homeDir(), ".pi", "agent", "auth.json");
-  const lockPath = `${authPath}.lock`;
-
-  for (let attempt = 0; attempt < 20 && fileExists(lockPath); attempt++) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-
-  const current = fileExists(authPath) ? readFile(authPath) : "{}";
-  const parsed: unknown = current.trim() ? JSON.parse(current) : {};
-  if (!isRecord(parsed)) {
-    throw new Error("auth.json is not a JSON object");
-  }
-  const next = {
-    ...parsed,
-    clinepass: {
+  const write = options.writeOmpCredential ?? boundCredentialStore.write;
+  if (write) {
+    // Preserve every field OMP stored (type, expiry, account identity) and
+    // overwrite only what the refresh rotated — a bare {access,refresh,expires}
+    // would silently drop the credential's identity metadata.
+    const existing = (options.readOmpCredential ?? boundCredentialStore.read)?.();
+    await write({
+      ...(existing ?? { type: "oauth" as const }),
       type: "oauth",
       access: credential.access,
       refresh: credential.refresh,
       expires: credential.expires,
-    },
+    });
+    return;
+  }
+
+  const { homeDir, readFile, fileExists, writeFile } = resolveOptions(options);
+  const authPath = join(homeDir(), ".pi", "agent", "auth.json");
+  const lockPath = `${authPath}.lock`;
+  const entry = {
+    type: "oauth",
+    access: credential.access,
+    refresh: credential.refresh,
+    expires: credential.expires,
   };
-  writeFile(authPath, JSON.stringify(next, null, 2));
+
+  for (let pass = 0; pass < 2; pass++) {
+    for (let attempt = 0; attempt < 20 && fileExists(lockPath); attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    const current = fileExists(authPath) ? readFile(authPath) : "{}";
+    const parsed: unknown = current.trim() ? JSON.parse(current) : {};
+    if (!isRecord(parsed)) {
+      throw new Error("auth.json is not a JSON object");
+    }
+    const serialized = JSON.stringify({ ...parsed, clinepass: entry }, null, 2);
+    writeFile(authPath, serialized);
+
+    let contended = false;
+    for (let attempt = 0; attempt < 20 && fileExists(lockPath); attempt++) {
+      contended = true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    // Done only when pi never contended and the file still holds exactly what
+    // we wrote; otherwise loop once more and merge over the newer content.
+    if (!contended && (!fileExists(authPath) || readFile(authPath) === serialized)) return;
+  }
 }
 
 // ─── Login chain ──────────────────────────────────────────────────────────
@@ -237,7 +343,8 @@ async function loginWithDeviceFlow(
   options: AuthOptions,
 ): Promise<OAuthCredentials> {
   const device = await startDeviceAuthorization({ fetch: options.fetch });
-  // OMP's OAuthLoginCallbacks has no onDeviceCode; use onAuth with instructions.
+  // OMP's OAuthLoginCallbacks has no onDeviceCode — the user code rides in
+  // onAuth's `instructions` instead, so the flow stays one screen.
   callbacks.onAuth({
     url: device.verificationUriComplete ?? device.verificationUri,
     instructions: `Enter the code: ${device.userCode} (expires in ${device.expiresInSeconds}s)`,
@@ -305,14 +412,18 @@ export async function login(callbacks: OAuthLoginCallbacks, options: AuthOptions
     optionsList.unshift({ id: "reuse", label: "Use existing sign-in (Cline CLI)" });
   }
 
-  // OMP's OAuthLoginCallbacks has no onSelect; use onPrompt as a text-based chooser.
-  const optionsText = optionsList.map((o) => `${o.id}: ${o.label}`).join("\n");
+  // OMP's OAuthLoginCallbacks has no onSelect — the chooser is rendered as
+  // text and the answer read back through onPrompt. The user types an option
+  // id ("device" / "paste" / "reuse"); the id list in the options map keeps
+  // the prompt and the switch below from drifting apart.
   const selected = (
     await callbacks.onPrompt({
-      message: `Choose how to sign in to ClinePass\n\n${optionsText}`,
+      message: `Choose how to sign in to ClinePass\n\n${optionsList.map((o) => `${o.id}: ${o.label}`).join("\n")}`,
       placeholder: "Enter the option id (e.g. 'device', 'paste')",
     })
-  ).trim().toLowerCase();
+  )
+    .trim()
+    .toLowerCase();
   if (!selected) throw new Error("ClinePass login cancelled");
 
   switch (selected) {

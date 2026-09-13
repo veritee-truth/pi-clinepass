@@ -1,6 +1,6 @@
 {
   "name": "pi-clinepass-omp",
-  "version": "0.1.1-omp",
+  "version": "0.1.5-omp",
   "description": "ClinePass provider for OMP — static measured-price catalog, server-truth billing meter, free models (OMP fork)",
   "keywords": [
     "ai",
@@ -16,7 +16,7 @@
   "author": "fifidayone",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/fifidayone/pi-clinepass.git"
+    "url": "git+https://github.com/veritee-truth/pi-clinepass.git"
   },
   "type": "module",
   "main": "src/index.ts",
@@ -37,9 +37,16 @@
   },
   "peerDependencies": {
     "@oh-my-pi/pi-ai": "*",
-    "@oh-my-pi/pi-coding-agent": "*"
+    "@oh-my-pi/pi-coding-agent": "*",
+    "@oh-my-pi/pi-tui": "*",
+    "@oh-my-pi/pi-utils": "*"
   },
   "devDependencies": {
+    "@oh-my-pi/pi-ai": "^18.1.16",
+    "@oh-my-pi/pi-catalog": "^18.1.16",
+    "@oh-my-pi/pi-coding-agent": "^18.1.16",
+    "@oh-my-pi/pi-tui": "^18.1.16",
+    "@oh-my-pi/pi-utils": "^18.1.16",
     "@types/node": "^26.3.0",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"

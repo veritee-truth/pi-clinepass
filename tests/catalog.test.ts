@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { MODELS, isFreeModel, modelIds } from "../src/catalog.js";
 
 describe("catalog", () => {
-  it("has 16 models: 13 paid + 3 free", () => {
-    expect(MODELS).toHaveLength(16);
-    expect(MODELS.filter((m) => m.cost.input === 0)).toHaveLength(3);
-    expect(MODELS.filter((m) => m.cost.input > 0)).toHaveLength(13);
+  it("has 21 models: 15 paid + 6 free", () => {
+    expect(MODELS).toHaveLength(21);
+    expect(MODELS.filter((m) => m.cost.input === 0)).toHaveLength(6);
+    expect(MODELS.filter((m) => m.cost.input > 0)).toHaveLength(15);
   });
 
   it("uses measured billing prices (not published)", () => {
@@ -32,6 +32,9 @@ describe("catalog", () => {
     expect(isFreeModel("z-ai/glm-5.3-flash")).toBe(true);
     expect(isFreeModel("poolside/laguna-s-2.1:free")).toBe(true);
     expect(isFreeModel("deepseek/deepseek-v4-flash")).toBe(true);
+    expect(isFreeModel("cline-free/longcat-2.0")).toBe(true);
+    expect(isFreeModel("cline-free/solar-pro4")).toBe(true);
+    expect(isFreeModel("cline-free/muse-spark-1.3-contributor")).toBe(true);
     expect(isFreeModel("cline-pass/deepseek-v4-flash")).toBe(false);
   });
 
@@ -46,6 +49,15 @@ describe("catalog", () => {
     const plus = MODELS.find((m) => m.id === "cline-pass/qwen3.7-plus");
     expect(plus?.thinkingLevelMap.off).toBe("none");
     expect(plus?.thinkingLevelMap.max).toBe("max");
+  });
+
+  it("longcat supports all 7 thinking levels (off allowed)", () => {
+    const m = MODELS.find((x) => x.id === "cline-free/longcat-2.0");
+    expect(m?.reasoning).toBe(true);
+    for (const level of ["off", "minimal", "low", "medium", "high", "xhigh", "max"]) {
+      expect(typeof m?.thinkingLevelMap[level as keyof typeof m.thinkingLevelMap]).toBe("string");
+    }
+    expect(m?.thinkingLevelMap.off).toBe("none");
   });
 
   it("sets ClinePass compat on every model", () => {

@@ -1,15 +1,18 @@
 <div align="center">
 
-# pi-clinepass
+# pi-clinepass-omp
 
-**ClinePass provider for [pi](https://pi.dev) coding agent**
+**ClinePass for [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP)**
 
 Dollar-based limits, live cost tracking, and plan cap reporting.
+
+OMP fork of [pi-clinepass](https://github.com/fifidayone/pi-clinepass), tracking
+upstream **v0.1.5**. See [OMP-GAPS.md](OMP-GAPS.md) for the host-API differences
+and how each is handled.
 
 <br>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/pi-clinepass"><img src="https://img.shields.io/badge/npm-pi--clinepass-CB3837?style=for-the-badge&logo=npm&logoColor=white" alt="npm package"></a>
   <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-7.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript 7"></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-%3E%3D22.19-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-000000?style=for-the-badge" alt="MIT License"></a>
@@ -25,19 +28,20 @@ Dollar-based limits, live cost tracking, and plan cap reporting.
 
 ## Highlights
 
-- **16 Models**: 13 ClinePass models on a dollar-based limit system plus 3 free tier models
-- **Live Status Meter**: Per-turn and session cost directly in the pi footer
+- **22 Models**: 16 ClinePass models on a dollar-based limit system plus 6 free tier models
+- **Live Status Meter**: Per-turn and session cost directly in the OMP footer
 - **Plan Utilization**: 5-hour, weekly, and monthly caps tracked via `/clinepass`
+- **Price Calibration**: measure real gateway billing from `/clinepass` to keep displayed prices honest
 - **Simple Auth**: One-time login via Cline CLI, browser, or API key
 
 ---
 
 ## Installation
 
-Requires **Node.js 22.19+** and [pi](https://pi.dev).
+Requires [OMP](https://github.com/can1357/oh-my-pi).
 
 ```sh
-pi install npm:pi-clinepass
+omp plugin install github:veritee-truth/pi-clinepass#omp
 ```
 
 ---
@@ -46,7 +50,7 @@ pi install npm:pi-clinepass
 
 ### 1. Authenticate
 
-Run the login command inside pi:
+Run the login command inside OMP:
 
 ```
 /login
@@ -68,7 +72,7 @@ Select **ClinePass** to choose your sign-in method:
 
 ### 2. Select a Model
 
-Pick any model using the interactive selector:
+Pick any model using the interactive selector — prices are shown right in the picker:
 
 ```
 /model
@@ -83,6 +87,10 @@ View the live rate sheet and plan limit utilization anytime:
 ```
 /clinepass
 ```
+
+The command opens a menu: the dashboard shows model rates and plan utilization
+in a centered modal, or run **price calibration** to measure real gateway
+billing and update the whole panel (uses ~5-10% of the 5-hour quota).
 
 <div align="center">
   <img src="https://raw.githubusercontent.com/fifidayone/pi-clinepass/main/assets/report.png" alt="ClinePass report with pricing and plan limits" width="620">
