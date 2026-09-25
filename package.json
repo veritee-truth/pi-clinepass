@@ -1,6 +1,6 @@
 {
   "name": "pi-clinepass-omp",
-  "version": "0.1.5-omp",
+  "version": "0.1.6-omp",
   "description": "ClinePass provider for OMP — static measured-price catalog, server-truth billing meter, free models (OMP fork)",
   "keywords": [
     "ai",

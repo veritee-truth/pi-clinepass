@@ -7,7 +7,7 @@
 Dollar-based limits, live cost tracking, and plan cap reporting.
 
 OMP fork of [pi-clinepass](https://github.com/fifidayone/pi-clinepass), tracking
-upstream **v0.1.5**. See [OMP-GAPS.md](OMP-GAPS.md) for the host-API differences
+upstream **v0.1.6**. See [OMP-GAPS.md](OMP-GAPS.md) for the host-API differences
 and how each is handled.
 
 <br>
@@ -28,7 +28,7 @@ and how each is handled.
 
 ## Highlights
 
-- **22 Models**: 16 ClinePass models on a dollar-based limit system plus 6 free tier models
+- **17 Models**: 12 ClinePass models on a dollar-based limit system plus 5 free tier models
 - **Live Status Meter**: Per-turn and session cost directly in the OMP footer
 - **Plan Utilization**: 5-hour, weekly, and monthly caps tracked via `/clinepass`
 - **Price Calibration**: measure real gateway billing from `/clinepass` to keep displayed prices honest

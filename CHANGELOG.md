@@ -1,8 +1,42 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
-Entries above 0.1.5 track upstream pi-clinepass; the OMP fork's own adaptation
-notes are marked separately.
+Entries above 0.1.6 track upstream pi-clinepass; the OMP fork's own adaptation
+notes are marked separately. Fork entries (`-omp`) lead, newest first, followed
+by the upstream entries they absorbed.
+
+## 0.1.6-omp - 2026-09-25
+
+OMP fork rebased onto upstream 0.1.6 (`33f3e23`); the upstream entry below lists
+what 0.1.6 itself changed. The adaptation was replayed onto the new tree, and
+the fork's own delta is identical in shape to 0.1.5-omp (15 files, +523/-212
+against upstream), so nothing adapted was lost in the rebase.
+
+What lands on OMP specifically:
+
+- Free-route identifying headers now carry Cline CLI **3.0.65** (was 3.0.61)
+  plus the updated header convention. Verified live on OMP 18.1.0: both free
+  models carry the full set, paid models carry none, and a free-route
+  completion through `cline-free/deepseek-v4.1-flash` succeeded — a stale
+  client version is what the gateway's "Cline product surfaces" gate rejects
+  with 403.
+- Catalog 21 -> 17 models: retired models (including `cline-free/longcat-2.0`,
+  `solar-pro4`, `z-ai/glm-5.3-flash`) no longer register, so they cannot be
+  selected into a 404. New: `cline-free/gemini-3.8-flash` (mandatory
+  low/medium/high reasoning), `cline-free/deepseek-v4.1-flash`,
+  `cline-free/mimo-v2.6-flash`, `stealth/space-bunny-alpha`, and paid
+  `cline-pass/muse-spark-1.3-contributor`.
+- Errors: a gateway 402/404/5xx or an upstream provider payload is no longer
+  reported as `auth_expired`. The old classification could feed a false expiry
+  into OMP's AuthStorage refresh path.
+- `src/index.ts` file header rewritten: it still described pi's hook set
+  (`before_provider_headers`, `model_select`) and pi's price-store path, neither
+  of which this fork uses.
+
+Gates: `tsc --noEmit` clean against pinned `@oh-my-pi/*` 18.1.16; vitest 111/111
+(9 files); live OMP 18.1.0 smoke — 17 clinepass models register, 0.1.6-only
+models resolve, retired models do not, `hasConcreteAuth("clinepass")` true; real
+completions through one free and one paid 0.1.6-only model.
 
 ## 0.1.5-omp - 2026-09-13
 
@@ -27,9 +61,13 @@ OMP-specific adaptation:
 - OAuth login uses `onAuth` / `onPrompt`; modal views use `overlayOptions`
   instead of an overlay-handle `focus()` call (absent on OMP's handle).
 
-## 0.1.5 - 2026-09-12
+## 0.1.6 - 2026-09-25
 
-- New paid model: `cline-pass/deepseek-v4.1-flash` (measured rates pending calibration)
+- New free models: `cline-free/gemini-3.8-flash` (mandatory low/medium/high reasoning), `stealth/space-bunny-alpha`, `cline-free/mimo-v2.6-flash`, and `cline-free/deepseek-v4.1-flash`
+- New paid model: `cline-pass/muse-spark-1.3-contributor` ($0.10/$0.20/$0.01)
+- Retired models removed from catalog
+- Error classification refined: upstream provider errors, 402 (insufficient credits), 404 (model not found), and 5xx gateway errors no longer misclassified as expired auth
+- Free-route client headers updated to latest CLI convention
 
 ## 0.1.4 - 2026-09-09
 

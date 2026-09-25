@@ -1,16 +1,19 @@
 /**
- * pi-clinepass — ClinePass for pi.
+ * pi-clinepass-omp — ClinePass for OMP (fork of pi-clinepass).
  *
- * Registers the `clinepass` provider (14 paid models with measured billing
- * prices + 4 free models) and wires the hooks that keep pi's numbers real:
- *   - message_end → server-truth cost meter + session total + error surface + thinking repair
- *   - before_provider_headers → free-route Cline-CLI headers
- *   - model_select / session_start → immediate meter + default model sync
+ * Registers the `clinepass` provider (12 paid models with measured billing
+ * prices + 5 free models) and wires the hooks that keep the numbers real:
+ *   - session_start → initial billing meter, OMP AuthStorage bind, and the
+ *     Cline CLI version pre-warm the registration-time free-route headers use
+ *   - message_end → server-truth cost meter + session total + error surface
+ *   - context → gateway thinking-stream repair (OMP discards `message_end`
+ *     return values, so the repair runs on the hook that is honored)
  *   - /clinepass → dashboard report · price calibration (full-screen view)
  *
  * Model prices come from the static catalog unless the user has run
  * calibration (`/clinepass → Calibrate`), which measures the gateway's real
- * billing rates and persists them to ~/.pi/agent/clinepass-prices.json.
+ * billing rates and persists them to OMP's own agent directory
+ * (`<omp agent dir>/clinepass-prices.json`) — never pi's.
  */
 
 import type { ExtensionAPI, ExtensionContext, ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";

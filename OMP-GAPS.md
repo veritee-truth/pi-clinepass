@@ -3,7 +3,7 @@
 > Fork of [pi-clinepass](https://github.com/fifidayone/pi-clinepass) adapted for
 > [Oh My Pi](https://github.com/can1357/oh-my-pi) (OMP).
 >
-> Tracking upstream **v0.1.5**. Verified against OMP 18.1.0 (bundled runtime) and
+> Tracking upstream **v0.1.6**. Verified against OMP 18.1.0 (bundled runtime) and
 > `@oh-my-pi/*` 18.1.16 (plugin dependency resolution).
 
 ## Gaps vs Upstream pi-clinepass
