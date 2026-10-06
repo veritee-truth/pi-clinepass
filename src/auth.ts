@@ -71,6 +71,45 @@ let boundCredentialStore: {
   write?: (credential: OmpStoredCredential) => Promise<void>;
 } = {};
 
+/**
+ * The slice of OMP's AuthStorage the meter needs, across host versions.
+ *
+ * OMP <= 18.6 exposed flat methods (`getOAuthCredential`, `set`); OMP 18.7
+ * moved them under `authStorage.credentials` (`getOAuth`, `set`) with the same
+ * semantics (first `type: "oauth"` row; replace the provider's entry). This is
+ * the single place the host shape is resolved; everything else talks to the
+ * returned store. Returns undefined when neither shape is present, so the
+ * meter falls back to auth.json instead of throwing on every read.
+ */
+export function ompCredentialStoreFrom(authStorage: unknown, provider: string):
+  | { read: () => OmpStoredCredential | undefined; write: (credential: OmpStoredCredential) => Promise<void> }
+  | undefined {
+  if (!authStorage || typeof authStorage !== "object") return undefined;
+  type Getter = (provider: string) => unknown;
+  type Setter = (provider: string, credential: unknown) => Promise<void>;
+  const host = authStorage as {
+    credentials?: { getOAuth?: Getter; set?: Setter };
+    getOAuthCredential?: Getter;
+    set?: Setter;
+  };
+  const api = host.credentials;
+  if (api && typeof api.getOAuth === "function" && typeof api.set === "function") {
+    const { getOAuth, set } = api;
+    return {
+      read: () => getOAuth.call(api, provider) as OmpStoredCredential | undefined,
+      write: (credential) => set.call(api, provider, credential),
+    };
+  }
+  if (typeof host.getOAuthCredential === "function" && typeof host.set === "function") {
+    const { getOAuthCredential, set } = host;
+    return {
+      read: () => getOAuthCredential.call(host, provider) as OmpStoredCredential | undefined,
+      write: (credential) => set.call(host, provider, credential),
+    };
+  }
+  return undefined;
+}
+
 /** Bind OMP's credential store for the process (called by the extension factory). */
 export function bindOmpCredentialStore(store: {
   read?: () => OmpStoredCredential | undefined;

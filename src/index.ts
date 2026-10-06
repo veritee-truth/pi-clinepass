@@ -23,9 +23,9 @@ import {
   bindOmpCredentialStore,
   getApiKey,
   login,
+  ompCredentialStoreFrom,
   refreshToken,
   resolveStoredCredential,
-  type OmpStoredCredential,
 } from "./auth.js";
 import {
   getCapReport,
@@ -148,15 +148,8 @@ export default async function (pi: ExtensionAPI) {
    * and the /clinepass command run after it.
    */
   pi.on("session_start", (_event, ctx) => {
-    const authStorage = ctx.modelRegistry?.authStorage;
-    if (authStorage) {
-      bindOmpCredentialStore({
-        read: () => authStorage.getOAuthCredential(PROVIDER_NAME) as OmpStoredCredential | undefined,
-        write: async (credential) => {
-          await authStorage.set(PROVIDER_NAME, credential as Parameters<typeof authStorage.set>[1]);
-        },
-      });
-    }
+    const store = ompCredentialStoreFrom(ctx.modelRegistry?.authStorage, PROVIDER_NAME);
+    if (store) bindOmpCredentialStore(store);
     // Pre-warm the Cline CLI version here instead of the factory: the factory
     // runs for every invocation (including --list-models). The sync header
     // builder falls back to the bundled version until this fetch completes;
